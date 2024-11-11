@@ -20,12 +20,13 @@ EnergyMonitor emon1;
 int rede = 127.0;   // Tensão da rede
 int pino_sct = A0;  // Pino analógico do ESP8266
 
-// Variável para o IP ou hostname do servidor
-const char* serverAddress = "raspberrypi.local"; // Altere aqui para o IP ou hostname
+// Variável para o IP ou hostname do servidor InfluxDB
+const char* serverAddress = "raspberrypi.local"; // Endereço do InfluxDB
+const int serverPort = 8086;  // Porta padrão do InfluxDB
 
 // Variável para controlar o tempo de envio
 unsigned long lastSendTime = 0;  // Armazena o último tempo de envio
-const unsigned long sendInterval = 5000; // Intervalo de 5 segundos
+const unsigned long sendInterval = 1000; // Intervalo de 1 segundos
 
 void setup() {
   Serial.begin(9600);  // Inicializa comunicação serial
@@ -86,21 +87,26 @@ void sendData() {
 
   double potencia = Irms * rede;
 
-  // Constrói a URL para enviar os dados ao servidor
-  String url = String("http://") + serverAddress + "/power_sensor/insert.php?";
-  url += "corrente=" + String(Irms, 2);
-  url += "&corrente_media=" + String(Irms_AVG, 2);
-  url += "&potencia=" + String(potencia, 2);
+  // Construindo a linha de dados no formato Line Protocol para o InfluxDB
+  String lineData = "central_power_sensor_raw ";
+  lineData += "corrente=" + String(Irms, 2) + ",";
+  lineData += "potencia=" + String(potencia, 2);
 
-  // Envia os dados para o servidor
+  // URL para o banco de dados InfluxDB
+  String url = String("/write?db=IOT_DB"); // Substitua "meu_banco" pelo nome do banco no InfluxDB
+
+  // Envia os dados para o InfluxDB
   WiFiClient client;
-  if (client.connect(serverAddress, 80)) {  // Usa a variável serverAddress
-    client.print(String("GET ") + url + " HTTP/1.1\r\n" +
+  if (client.connect(serverAddress, serverPort)) {
+    client.print(String("POST ") + url + " HTTP/1.1\r\n" +
                  "Host: " + serverAddress + "\r\n" +
-                 "Connection: close\r\n\r\n");
-    Serial.println("Dados enviados ao servidor.");
+                 "Connection: close\r\n" +
+                 "Content-Type: text/plain\r\n" +
+                 "Content-Length:  " + lineData.length() + "\r\n\r\n" +
+                 lineData);
+    Serial.println("Dados enviados ao InfluxDB.");
   } else {
-    Serial.println("Falha na conexão com o servidor.");
+    Serial.println("Falha na conexão com o InfluxDB.");
   }
   client.stop();  // Fecha a conexão
 }
@@ -111,14 +117,12 @@ void handleRoot() {
   html += "<body><h1>Medidor de Energia</h1>";
   html += "<div id='data'>";
   html += "<p>Corrente: <span id='corrente'>0.00</span> A</p>";
-  html += "<p>Corrente Média: <span id='correnteMedia'>0.00</span> A</p>";
   html += "<p>Potência: <span id='potencia'>0.00</span> W</p>";
   html += "</div>";
   html += "<script>";
   html += "function atualizarDados() {";
   html += "  fetch('/data').then(response => response.json()).then(data => {";
   html += "    document.getElementById('corrente').textContent = data.corrente;";
-  html += "    document.getElementById('correnteMedia').textContent = data.correnteMedia;";
   html += "    document.getElementById('potencia').textContent = data.potencia;";
   html += "  });";
   html += "}";
@@ -141,7 +145,6 @@ void handleData() {
 
   // Responde com os dados
   String json = "{\"corrente\":" + String(Irms, 2) + ",";
-  json += "\"correnteMedia\":" + String(Irms_AVG, 2) + ",";
   json += "\"potencia\":" + String(potencia, 2) + "}";
 
   server.send(200, "application/json; charset=UTF-8", json);
