@@ -4,8 +4,8 @@
 #include <EmonLib.h>
 
 // Configurações Wi-Fi
-const char* ssid = "Nina_2G";
-const char* password = "Internet1003#";
+const char* ssid = "NINA_2.4G";
+const char* password = "132#Internet";
 
 // Configurações do servidor web
 ESP8266WebServer server(80);
